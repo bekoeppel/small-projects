@@ -1,0 +1,252 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+=pod
+
+=for comment This is a POD documentation. The syntax is described here:
+http://perldoc.perl.org/perlpod.html. Please note that the blank lines are
+required.
+
+=head1 NAME
+
+B<byteconv> - convert file sizes from giga/mega/kilo-byte into easy-readable sizes
+
+=head1 SYNOPSIS
+
+B<byteconv> [--help|--man]
+[-i|--input I<INPUT>]
+[-iu|--inputunit I<INPUT_UNIT>]
+[-ou|--outputunit I<OUTPUT_UNIT>]
+[-b10|--base10]
+[-d|--delimiter I<DELIMITER>]
+[-k|--key I<KEY>]
+
+=head1 DESCRIPTION
+
+B<byteconv> reads input from STDIN, and can convert numbers from bytes into
+kilo-, mega- and gigabytes. Together with tools like I<du>, this makes it possible
+to sort numerically by size first, and then convert the bytes into human readable
+units.
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--help>
+
+Print a brief help message and exit.
+
+=item B<--man>
+
+Print the manual page and exit.
+
+=item B<-i|--input> I<INPUT>
+
+B<Unused!>. This option should allow to use an alternate input, default is STDIN.
+
+=item B<-iu|--inputunit> I<INPUT_UNIT>
+
+The unit of the input values. If this option is not specified, then B<byteconv> 
+reads tries to extract the unit from the input value.
+
+=item B<-ou|--outputunit> I<OUTPUT_UNIT>
+
+The unit of the output values. If this option is not specified, then the unit will be
+set dynamically, so that the output values are between 0 and 1024.
+
+=item B<-b10|--base10>
+
+If this option is specified, B<byteconv> will use base 10 to transform the units. The
+default is base 2.
+
+=item B<-d|--delimiter> I<DELIMITER>
+
+B<byteconv> can split the input into multiple field, and convert values in only one field.
+The delimiter defines the separator between the fields. See also the B<-k|--key> option
+to specify which field is converted.
+
+=item B<-k|--key> I<KEY>
+
+If the input has multiple fields (see also the B<-d|--delimiter> option), this option allows to specify the number of the field which should be converted.
+
+=back
+
+=head1 EXAMPLES
+
+I often find myself tracking big folders and files on my disk. To do that, I usually use C<du -sh ./*>, which 
+has the disadvantage that I can't use C<sort> on it. If I use C<du -s ./*> (without the C<-h> option), I could
+use C<sort>, but the output in bytes doesn't give me any sense of size.
+
+Using B<byteconv>, I can easily have both -- sort by size, and then transform the values into easy readable sizes:
+
+	du -s ./* | sort -n | byteconv
+
+or
+
+	du -s ./* | sort -n | byteconv --inputunit "B" --outputunit "M"
+
+
+
+
+=head1 AUTHOR
+
+Benedikt Koeppel, L<mailto:code@benediktkoeppel.ch>, L<http://benediktkoeppel.ch>
+
+=cut
+
+use Getopt::Long qw(GetOptions HelpMessage :config no_ignore_case);
+use Pod::Usage;
+use Switch;
+
+# don't enable
+my $debug = 0;
+
+# configuration
+my %opts;
+$opts{'delimiter'} = "\t";
+$opts{'key'} = 0;
+GetOptions(
+	'h|H|help|usage|?'	=> sub { HelpMessage(-verbose => 1) },
+	'man'			=> sub { HelpMessage(-verbose => 2) },
+	'i|input=s'		=> \$opts{'input'},
+	'iu|inputunit=s'	=> \$opts{'inputunit'},
+	'ou|outputunit=s'	=> \$opts{'outputunit'},
+	'b10|base10'		=> \$opts{'base10'},
+	'd|delimiter=s'		=> \$opts{'delimiter'},
+	'k|key=s'		=> \$opts{'key'}
+) or pod2usage(1);	
+
+# process each line separately
+while(<>) {
+
+	chomp;
+	print "\n$_\n" if $debug;
+	my @line = split(/$opts{'delimiter'}/);
+	my $input_str = @line[ $opts{'key'} ];
+
+	# parse the value
+	my $input_int;
+	if ( $input_str =~ /([0-9.]+)/ ) {
+		$input_int = $1;
+	} else {
+		print "ERROR: no input value given\n";
+		pod2usage(1);
+		exit;
+	}
+	print "input_int is $input_int\n" if $debug;
+	
+	# parse the units
+	my $input_unit = "b";
+	if ( defined $opts{'inputunit'} ) {
+		$input_unit = $opts{'inputunit'};
+	} elsif ( $input_str =~ /([A-Za-z]+)/ ) {
+		$input_unit = $1;
+	} else {
+		$input_unit = "b";
+	}
+	print "inputunit is $input_unit\n" if $debug;
+
+	# fix base
+	my $base = defined $opts{'base10'} ? 1000 : 1024;
+
+	# translate units to multiplication factors
+	my $input_factor = unit_to_factor($input_unit, $base);
+	print "input_factor is $input_factor\n" if $debug;
+
+	# get input in bytes
+	my $input_bytes = $input_int * $input_factor;
+	print "input_bytes is $input_bytes\n" if $debug;
+
+	# convert to output
+	my $output_int;
+	my $output_unit;
+	if ( defined $opts{'outputunit'} ) { # easy case: output unit is fixed
+		# convert output unit to factor
+		$output_unit = $opts{'outputunit'};
+		my $output_factor = unit_to_factor($output_unit, $base);
+		print "output_factor is $output_factor\n" if $debug;
+
+		# divide bytes by factor
+		$output_int = $input_bytes / $output_factor;
+		print "output_int is $output_int$output_unit\n" if $debug;
+
+	} else {	# difficult case, output_int should be between 0 and 1024
+		my $output_exp = -1;	# exp gets increased with every iteration
+
+		# in each iteration, increase $output_exp, then calculate the new $output_int
+		# if $output_int gets between 0 and 1024, the loop terminates
+		while( !defined $output_int || $output_int < 0 || $output_int >= $base ) {
+			$output_exp += 1;
+			print "output_exp is $output_exp\n" if $debug;
+			my $output_factor = $base ** $output_exp;
+			$output_int = $input_bytes / $output_factor;
+			print "output_int is $output_int\n" if $debug;
+		}
+
+		# convert exponent into character
+		$output_unit = exp_to_unit($output_exp);
+		print "output_unit is $output_unit\n" if $debug;
+	}
+
+	# done
+	my $output_str = sprintf("%7.2f %s", $output_int, $output_unit);
+	$line[ $opts{'key'} ] = $output_str;
+
+	print join($opts{'delimiter'}, @line) . "\n";
+}
+
+sub unit_to_factor {
+	my $unit = shift;
+	my $base = shift;
+	my $factor;
+	
+	if (!defined $base) { $base = 1024; }
+
+	if ( $unit =~ /^(b|byte)/i ) {
+		$factor = $base ** 0;
+	} elsif ( $unit =~ /^(k|kb|kilo|kbyte|kib)/i ) {
+		$factor = $base ** 1;
+	} elsif ( $unit =~ /^(m|mb|mega|mbyte|mib)/i ) {
+		$factor = $base ** 2;
+	} elsif ( $unit =~ /^(g|gb|giga|gbyte|gib)/i ) {
+		$factor = $base ** 3;
+	} elsif ( $unit =~ /^(t|tb|tera|tbyte|tib)/i ) {
+		$factor = $base ** 4;
+	} elsif ( $unit =~ /^(p|pb|peta|pbyte|pib)/i ) {
+		$factor = $base ** 5;
+	} elsif ( $unit =~ /^(e|eb|exa|ebyte|eib)/i ) {
+		$factor = $base ** 6;
+	} elsif ( $unit =~ /^(z|zb|zetta|zeta|zib)/i ) {
+		$factor = $base ** 7;
+	} elsif ( $unit =~ /^(y|yb|yotta|yota|yib)/i ) {
+		$factor = $base ** 8;
+	} else {
+		$factor = $base ** 0;
+	}
+	return $factor;
+}
+
+sub exp_to_unit {
+	my $exp = shift;
+	my $unit;
+
+	switch($exp) {
+		case 0 { $unit = "B"; }
+		case 1 { $unit = "KiB"; }
+		case 2 { $unit = "MiB"; }
+		case 3 { $unit = "GiB"; }
+		case 4 { $unit = "TiB"; }
+		case 5 { $unit = "PiB"; }
+		case 6 { $unit = "EiB"; }
+		case 7 { $unit = "ZiB"; }
+		case 8 { $unit = "YiB"; }
+		else {
+			print "ERROR: could not convert exponent $exp to unit\n";
+			pod2usage(1);
+			exit;
+		}
+	}
+	return $unit;
+}
