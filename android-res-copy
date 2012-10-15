@@ -1,0 +1,131 @@
+#!/bin/bash
+
+# POD documentation
+: <<=cut
+=pod
+
+=for comment This is a POD documentation. The syntax is described here:
+http://perldoc.perl.org/perlpod.html. Please note that the blank lines are
+required.
+
+=head1 NAME
+
+B<android-res-copy> - Android SDK Resources Copy
+
+=head1 SYNOPSIS
+
+B<android-res-copy> [--help|--man]
+[-s|--source I<SOURCE_DIR>]
+[-t|--target I<TARGET_DIR>]
+[-f|--file I<FILE_NAME>]
+
+=head1 DESCRIPTION
+
+B<android-res-copy> allows to copy resources from an Android SDK folder
+into your project. For example, if you want to use some icons from the 
+Android SDK, you will have to copy them into your project's I<res> folder
+and adjust the names.
+
+In addition to copy the file from the source directory to the target
+directory, any leading numbers and dashes are removed, and any further 
+dash is replaced by an underscore. This is because the files in the 
+Android resource packs are prefixed with a number (to sort them into
+logical groups), but the Android SDK can't handle files starting with 
+numbers or containing dashes.
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--help>
+
+Print a brief help message and exit.
+
+=item B<--man>
+
+Print the manual page and exit.
+
+=item B<-s | --source> I<SOURCE_DIR>
+
+The path to a source of Android resources, should have hdpi, mdpi and xhdpi subfolders.
+
+=item B<-t | --target> I<TARGET_DIR>
+
+The path to your Android project's res folder, should have drawable-{hdpi, mdpi and xhdpi} subfolders
+
+=item B<-f | --file> I<FILE_NAME>
+
+The name of the resource you want to copy from I<SOURCE_DIR>/{hdpi,mdpi,xhdpi} over to I<TARGET_DIR>/drawable-{hdpi,mdpi,xhdpi} folders
+
+=back
+
+=head1 EXAMPLE
+
+The following command will copy I<5-content-paste.png> from the icon_templates/{hdpi,mdpi,xhdpi}/ folders over to 
+~/eclipse/AndroidProject/res/drawable-{hdpi,mdpi,xhdpi} and rename it to I<content_paste.png> there.
+
+	android-res-copy -s ~/icon_templates/ -t ~/eclipse/AndroidProject/res/ -f 5-content-paste.png
+
+
+=head1 AUTHOR
+
+Benedikt Koeppel, L<mailto:code@benediktkoeppel.ch>, L<http://benediktkoeppel.ch>
+
+=cut
+
+# automatically print usage and man page
+usage() { pod2usage -verbose 1 $0; exit 1; }
+man()   { pod2usage -verbose 2 $0; exit 1; }
+
+# option parsing
+# options can be a switch (i.e. true/false), or they can have an argument, e.g.
+# in '--optionstring XYZ', 'XYZ' is the argument for the --optionstring option.
+# options that require an argument are followed by a colon
+# add short options here: -------------------------------------------------\
+# add long options here: -----------------v (separated by a space)         V
+GETOPT_OPT=`getopt -n$0 -a --longoptions="help man source: target: file:" "hms:t:f:" "$@"` || usage
+set -- $GETOPT_OPT
+[ $# -eq 0 ] && usage
+
+while [ $# -gt 0 ]
+do
+	case "$1" in
+		# add parsing of your options here. If the option has an
+		# argument, then use 'shift;;' at the end, otherwise just ';;'
+		-h|--help)		usage;;			# -h/--help, print usage
+		-m|--man)		man;;			# -m/--man, print the man page
+		-t|--target)		TARGET_DIR=$2;shift;;
+		-s|--source)		SOURCE_DIR=$2;shift;;
+		-f|--file)		FILE_NAME=$2;shift;;
+		--)			shift;break;;		# this was the last option to process
+		-*)			usage;;			# unknown option, print usage
+		*)			break;;			# anything unexpected
+	esac
+	shift
+done
+
+# directory checks
+if [ ! -d $SOURCE_DIR ]; then
+	echo "SOURCE_DIR $SOURCE_DIR path not found"
+	usage
+fi
+if [ ! -d $TARGET_DIR ]; then
+	echo "TARGET_DIR $TARGET_DIR path not found"
+	usage
+fi
+
+if [ ! -d $SOURCE_DIR/hdpi ] || [ ! -d $SOURCE_DIR/mdpi ] || [ ! -d $SOURCE_DIR/xhdpi ]; then
+	echo "SOURCE_DIR $SOURCE_DIR does not have {hdpi, mdpi and xhdpi} subdirectories"
+	usage
+fi
+if [ ! -d $TARGET_DIR/drawable-hdpi ] || [ ! -d $TARGET_DIR/drawable-mdpi ] || [ ! -d $TARGET_DIR/drawable-xhdpi ]; then
+	echo "TARGET_DIR $TARGET_DIR does not have {hdpi, mdpi and xhdpi} subdirectories"
+	usage
+fi
+
+# make target file name compatible with Android SDK (no leading numbers, and replace - by _)
+TARGET_FILE_NAME=$(echo $FILE_NAME | sed 's/^[0-9]*-//' | sed 's/-/_/g')
+
+cp $SOURCE_DIR/hdpi/$FILE_NAME $TARGET_DIR/drawable-hdpi/$TARGET_FILE_NAME
+cp $SOURCE_DIR/mdpi/$FILE_NAME $TARGET_DIR/drawable-mdpi/$TARGET_FILE_NAME
+cp $SOURCE_DIR/xhdpi/$FILE_NAME $TARGET_DIR/drawable-xhdpi/$TARGET_FILE_NAME
