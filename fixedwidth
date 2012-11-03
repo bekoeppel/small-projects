@@ -1,0 +1,93 @@
+#!/usr/bin/perl
+
+=pod
+
+=head1 NAME
+
+B<fixedwidth> - print a CSV file in fixed width columns
+
+=head1 DESCRIPTION
+
+B<fixedwidth> reads a CSV file and prints each column in a fixed width format. The widest field in each column defines the column width.
+
+=head2 Example
+
+cat file.csv | B<fixedwidth> -d ';'
+
+=head1 SYNOPSYS
+
+B<fixedwidth> S<[-d|--delimiter=I<DELIM>]> S<[-l|--left]> I<FILE>>
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<-d | --delimiter=>I<DELIM>
+
+File delimiter, default is a tab.
+
+=item B<-l | --left>
+
+Left-align the output. Default is right-align.
+
+=back
+
+=head1 AUTHOR
+
+Benedikt Koeppel <info@benediktkoeppel.ch>
+
+=cut
+
+use strict;
+use warnings;
+
+use Getopt::Long qw(HelpMessage :config no_ignore_case);
+use Pod::Usage;
+use List::Util qw(max);
+
+my $fs = "\t";
+my $left = 0;
+GetOptions(
+	'h|H|?|help|usage'	=> sub { HelpMessage(-verbose => 1) },
+	'm|man'			=> sub { HelpMessage(-verbose => 2) },
+	'd|delimiter=s'		=> \$fs,
+	'l|left'		=> \$left,
+) or pod2usage( -verbose => 1, -msg => 'Invalid option', -exitval => 1);
+if ( $left ) {
+	$left = "-";
+} else {
+	$left = "";
+}
+
+# storage
+# lines, split up into fileds
+my @lines;
+# maximum width of each field
+my @fieldwidths;
+
+# read in
+while(<>) {
+	chomp;
+	my @line = split /$fs/, $_;
+	push @lines, \@line;
+
+	my $fieldnum = 0;
+	foreach my $field ( split/$fs/, $_ ) {
+		if(defined $fieldwidths[$fieldnum]) {
+			$fieldwidths[$fieldnum] = max(length($field), $fieldwidths[$fieldnum]);
+		} else {
+			$fieldwidths[$fieldnum] = length($field);
+		}
+		$fieldnum++;
+	}
+}
+
+# print out
+foreach my $line (@lines) {
+	my $fieldnum = 0;
+	foreach my $field (@{$line}) {
+		printf("%" . $left . ($fieldwidths[$fieldnum]+1) . "s ", $field);
+		$fieldnum++;
+	}
+	print "\n";
+}
