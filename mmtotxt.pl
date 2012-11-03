@@ -29,7 +29,9 @@ GetOptions(
 	'C|connectors'          => \$opts{'print_connectors'},
 	't|truncate=s@{1,}'     => \@{$opts{'truncate_pattern'}},
 	'a|age=s'		=> \$opts{'min_age'},
-	'r|root=s'		=> \$opts{'root'}
+	'r|root=s'		=> \$opts{'root'},
+	'j|join-newlines'	=> \$opts{'join_newlines'},
+	'w|whole-path'		=> \$opts{'whole_path'}
 ) or HelpMessage(-verbose => 1);
 
 # print help if requested
@@ -111,11 +113,21 @@ sub recurse {
 
 		# indent depends on the depth (level)
 		my $indent = " " x ($level*$opts{'spaces_per_indent'});
-		my $newline_separator = "\r\n" . $indent . $opts{'newline_separator'};
+		my $newline_separator;
+		if ( defined $opts{'join_newlines'} ) {
+			$newline_separator = $opts{'newline_separator'};
+		} else {
+			$newline_separator = "\r\n" . $indent . $opts{'newline_separator'};
+		}
 		$output .= $indent;
 
 		# the node ID
 		my $nodeid = $node->getAttribute("ID");
+
+		# prepend the whole path (i.e. the parent) if the wholepath option was specified
+		if ($opts{'whole_path'}) {
+			$output .= "$parent/";
+		}
 
 		# the TEXT attribute holds the visible text. Newlines need to be replaced by newlines *and* the proper indent, and a " \- " marker to signalize the multiline node
 		my $text = $node->getAttribute("TEXT");
@@ -384,6 +396,8 @@ S<[B<-C|--connectors>]>
 S<[B<-t|--truncate> I<TRUNCATE_PATTERN> [I<TRUNCATE_PATTERN>]]>
 S<[B<-r|--root> I<ROOT>]>
 S<[B<-a|--age> I<MIN_AGE>]>
+S<[B<-j|--join-newlines>]>
+S<[B<-w|--whole-path>]>
 
 =head1 EXAMPLES
 
@@ -506,6 +520,20 @@ specifying S<--root /top/node2/> will only print out node 2, and subnodes x and 
 =item B<-a|--age> I<MIN_AGE>
 
 If specified, then the output file is only generated if it is older than AGE seconds.
+
+=item B<-j|--join-newlines>
+
+Instead of properly indenting nodes with multiple lines, the node's lines are all joined together by the newline-separator characters. For example,
+if you have a node with three lines "line1", "line2" and "line3", then normally those lines would be printed separated by newlines, but correctly
+indented. If you specify the B<-j|--join-newlines> option however, the node is printed as "line1line2line3". If you want to specify a separator
+in between the individual lines, specify the newline separator with the B<-ns|--separator> option. For example, the two options
+B<--separator ', '> and B<--join-newlines> leads to "line1, line2, line3" in the output.
+
+=item B<-w|--whole-path>
+
+Prints the whole path (i.e. all parents nodes) in front of this node's name. Thus, in above example, subnode y would be printed as C<top/node 2/subnode y>.
+
+
 
 =back
 
