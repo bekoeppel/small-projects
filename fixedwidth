@@ -44,6 +44,9 @@ use warnings;
 use Getopt::Long qw(HelpMessage :config no_ignore_case);
 use Pod::Usage;
 use List::Util qw(max);
+use utf8;
+binmode STDOUT, ":utf8";
+binmode STDIN, ":utf8";
 
 my $fs = "\t";
 my $left = 0;
