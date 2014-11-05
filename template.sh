@@ -62,10 +62,20 @@ man()   { pod2usage -verbose 2 $0; exit 1; }
 # options that require an argument are followed by a colon
 # add short options here: -----------------------------------------------------\
 # add long options here: -----------------v (separated by a space)             V
-GETOPT_OPT=`getopt -n$0 -a --longoptions="help man commandline optionstring:" "hmco:" "$@"` || usage
+# Mac OS X `getopt` does not support long options and is broken badly.
+SHORTOPTS="hmco:"
+LONGOPTS="help man commandline optionstring:"
+if [ "$(getopt -V | grep getopt >/dev/null; echo $?)" -ne 0 ]
+then
+	# Non-GNU, only short options
+	GETOPT_OPT=$(getopt $SHORTOPTS $*) || usage
+else
+	# GNU, support for long options
+	GETOPT_OPT=$(getopt -n"$0" -a --longoptions="$LONGOPTS" "$SHORTOPTS" "$@") || usage
+fi
 set -- $GETOPT_OPT
 [ $# -eq 0 ] && usage
-
+	
 while [ $# -gt 0 ]
 do
 	case "$1" in
