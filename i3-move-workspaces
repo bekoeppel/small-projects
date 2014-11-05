@@ -77,7 +77,7 @@ use Data::Dumper;
 my $listmode = 0;
 my $from;
 my $to;
-my @numbers;
+my @number;
 
 # parse command line options
 GetOptions(
@@ -86,7 +86,7 @@ GetOptions(
 	'l|list'		=> \$listmode,
 	'f|from=s'		=> \$from,
 	't|to=s'		=> \$to,
-	'n|number=s@'		=> \@numbers
+	'n|number=s@'		=> \@number
 ) or pod2usage( -verbose => 1, -msg => 'Invalid option', -exitval => 1);
 
 sub get_outputs {
@@ -167,58 +167,31 @@ if ( $listmode ) {
 # default TO
 if ( !defined $to ) {
 	my $outputs = get_outputs();
-	foreach my $output (@{$outputs}) {
-		if ($output->{'active'}) {
+	foreach my $output (@{$putputs}) {
+		if $output->{'active'} {
 			$to = $output->{'name'};
 			last;
 		}
 	}
-	if (!defined $to) {
-		die "There is no active output. Something is wrong!";
-	}
+	die "There is no active output. Something is wrong!";
 }
 
 # which workspaces to move
 if ( !@numbers ) {
-	my $workspaces = get_workspaces();
-	foreach my $workspace (@{$workspaces}) {
 
-		# if --from was specified, only move the workspaces from there
-		if ( defined $from ) {
-			if ( $workspace->{'output'} eq $from ) {
-				push @numbers, $workspace->{'num'};
-			}
-		}
-		# otherwise move all workspaces
-		else {
-			push @numbers, $workspace->{'num'};
-		}
-	}
-}
 
-# get current workspace
-my $initial_workspace;
-my $workspaces = get_workspaces();
-foreach my $workspace (@{$workspaces}) {
-	if ( $workspace->{'focused'} eq 'true' ) {
-		$initial_workspace = $workspace->{'num'};
-		print "initial is $initial_workspace\n";
-		last;
-	}
-}
 
-# move all workspaces
-foreach my $workspace_number (@numbers) {
-	my $reply;
-	if ($workspace_number != $initial_workspace) {
-		print "Moving workspace $workspace_number to output $to\n";
-		$reply = i3->command("workspace number $workspace_number")->recv;
-		$reply->[0]->{'success'} or warn "Error selecting workspace $workspace_number";
-	}
-	$reply = i3->command("move workspace to output $to")->recv;
-	$reply->[0]->{'success'} or warn "Error moving workspace $workspace_number to $to";
-}
+exit;
 
-# activate initial workspace again
-my $reply = i3->command("workspace number $initial_workspace")->recv;
-$reply->[0]->{'success'} or warn "Error selecting workspace $initial_workspace";
+###foreach my $workspace (@{$workspaces}) {
+###	if ( $workspace->{'output'} eq $from ) {
+###		print "Moving workspace ".$workspace->{'num'}." to output ".$to."\n";
+###		my $reply = i3->command("move workspace to output $to")->recv;
+###		print Dumper($reply);
+###	}
+###}
+###
+###
+####print "moving\n";
+####my $reply = i3->command("move workspace to output right")->recv;
+####print Dumper($reply);
