@@ -142,11 +142,11 @@ sub timer {
 	for (;;) {
 		my $start = time;
 		
-		send_email();
-
 		if ((my $remaining = $seconds - (time - $start)) > 0) {
 			sleep $remaining;
 		}
+
+		send_email();
 	}
 }
 
