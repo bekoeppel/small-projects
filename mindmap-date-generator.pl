@@ -74,7 +74,7 @@ GetOptions(
 
 my @localtime = localtime(time);
 if ( !defined $month ) {
-	$month=($localtime[4]+2)%12;	# +1 because the months in Perl start at 0, and +1 for the next month
+	$month=($localtime[4]+1)%12+1;	# +1 because the months in Perl start at 0, and +1 for the next month
 }
 if ( !defined $year ) {
 	$year=$localtime[5]+1900;
