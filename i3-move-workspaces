@@ -1,0 +1,224 @@
+#!/usr/bin/perl
+
+use strict;
+use warnings;
+
+=pod
+
+=head1 NAME
+
+B<i3-move-workspaces> - move I3 workspaces from one screen to another
+
+=head1 DESCRIPTION
+
+B<i3-move-workspaces> moves I3 workspaces from one screen (output) to another. Using the
+B<--from> and B<--to> option, you can explicitly specify the source and target for the 
+workspaces. However, if you omit the options, B<i3-move-workspaces> simply collects all
+workspaces from off-screen onto the currently active screen.
+
+=head1 SYNOPSIS
+
+B<i3-move-workspaces> [--help|--man] [-l|--list] [-f|--from I<FROM>] [-t|--to I<TO>] [-n|--number I<NUMBER>]
+
+=head1 OPTIONS
+
+=over 8
+
+=item B<--help>
+
+Print a brief help message and exit.
+
+=item B<--man>
+
+Print the manual page and exit.
+
+=item B<-l | --list>
+
+Only list the current outputs and workspaces.
+
+Default: off
+
+=item B<-f | --from> I<FROM>
+
+Specify the source output. You can list valid output names with the B<--list> option. Workspaces
+from this output will be moved to the output specified with the B<--to> option.
+
+Default: all outputs except the currently active one.
+
+=item B<-t | --to> I<TO>
+
+Specify the source output. You can list valid output names with the B<--list> option. Workspaces
+will be moved to this output.
+
+Default: the currently active output.
+
+=item B<-n | --number> I<NUMBER>
+
+Instead of moving all workspaces on the output specified with the B<--from> parameter, you can 
+specify the number of one or multiple workspaces using the B<--number> parameter. Those workspaces
+will be moved to the I<TO> workspace.
+
+Default: all workspaces
+
+=back
+
+=head1 AUTHOR
+
+Benedikt Koeppel, L<mailto:code@benediktkoeppel.ch>, L<http://benediktkoeppel.ch>
+
+=cut
+
+use Getopt::Long qw(HelpMessage :config no_ignore_case);
+use Pod::Usage;
+use AnyEvent::I3;
+use Data::Dumper;
+
+# variables for command line options
+my $listmode = 0;
+my $from;
+my $to;
+my @numbers;
+
+# parse command line options
+GetOptions(
+	'H|?|help|usage'	=> sub { HelpMessage(-verbose => 1) },
+	'm|man'			=> sub { HelpMessage(-verbose => 2) },
+	'l|list'		=> \$listmode,
+	'f|from=s'		=> \$from,
+	't|to=s'		=> \$to,
+	'n|number=s@'		=> \@numbers
+) or pod2usage( -verbose => 1, -msg => 'Invalid option', -exitval => 1);
+
+sub get_outputs {
+
+	# fetch outputs
+	my $outputs = i3->get_outputs->recv;
+
+	# clean up the flags
+	foreach my $output (@{$outputs}) {
+		# primary flag
+		if ('JSON::XS::Boolean' eq ref $output->{'primary'} && $output->{'primary'} ) {
+			$output->{'primary'} = 'true';
+		} else {
+			$output->{'primary'} = 'false';
+		}
+
+		# active flag
+		if ('JSON::XS::Boolean' eq ref $output->{'active'} && $output->{'active'} ) {
+			$output->{'active'} = 'true';
+		} else {
+			$output->{'active'} = 'false';
+		}
+
+	}
+
+	return $outputs;
+}
+
+sub get_workspaces {
+
+	# fetch workspaces
+	my $workspaces = i3->get_workspaces->recv;
+
+	# clean up the flags
+	foreach my $workspace (@{$workspaces}) {
+		# visibility flag
+		# TODO: this is wrong, because a workspace can be visible even if it is on an output that doesn't exist
+		if ('JSON::XS::Boolean' eq ref $workspace->{'visible'} && $workspace->{'visible'} ) {
+			$workspace->{'visible'} = 'true';
+		} else {
+			$workspace->{'visible'} = 'false';
+		}
+
+		# focused
+		if ('JSON::XS::Boolean' eq ref $workspace->{'focused'} && $workspace->{'focused'} ) {
+			$workspace->{'focused'} = 'true';
+		} else {
+			$workspace->{'focused'} = 'false';
+		}
+
+		# urgent
+		if ('JSON::XS::Boolean' eq ref $workspace->{'urgent'} && $workspace->{'urgent'} ) {
+			$workspace->{'urgent'} = 'true';
+		} else {
+			$workspace->{'urgent'} = 'false';
+		}
+	}
+
+	return $workspaces;
+}
+
+# list only, no actions
+if ( $listmode ) {
+
+	my $outputs = get_outputs();
+	my $workspaces = get_workspaces();
+
+	print "You have the following outputs:\n";
+	print Dumper($outputs);
+
+	print "Currently, you use " . @{$workspaces} . " workspaces\n";
+	print Dumper($workspaces);
+
+	exit;
+}
+
+# action stuff
+# default TO
+if ( !defined $to ) {
+	my $outputs = get_outputs();
+	foreach my $output (@{$outputs}) {
+		if ($output->{'active'}) {
+			$to = $output->{'name'};
+			last;
+		}
+	}
+	if (!defined $to) {
+		die "There is no active output. Something is wrong!";
+	}
+}
+
+# which workspaces to move
+if ( !@numbers ) {
+	my $workspaces = get_workspaces();
+	foreach my $workspace (@{$workspaces}) {
+
+		# if --from was specified, only move the workspaces from there
+		if ( defined $from ) {
+			if ( $workspace->{'output'} eq $from ) {
+				push @numbers, $workspace->{'num'};
+			}
+		}
+		# otherwise move all workspaces
+		else {
+			push @numbers, $workspace->{'num'};
+		}
+	}
+}
+
+# get current workspace
+my $initial_workspace;
+my $workspaces = get_workspaces();
+foreach my $workspace (@{$workspaces}) {
+	if ( $workspace->{'focused'} eq 'true' ) {
+		$initial_workspace = $workspace->{'num'};
+		print "initial is $initial_workspace\n";
+		last;
+	}
+}
+
+# move all workspaces
+foreach my $workspace_number (@numbers) {
+	my $reply;
+	if ($workspace_number != $initial_workspace) {
+		print "Moving workspace $workspace_number to output $to\n";
+		$reply = i3->command("workspace number $workspace_number")->recv;
+		$reply->[0]->{'success'} or warn "Error selecting workspace $workspace_number";
+	}
+	$reply = i3->command("move workspace to output $to")->recv;
+	$reply->[0]->{'success'} or warn "Error moving workspace $workspace_number to $to";
+}
+
+# activate initial workspace again
+my $reply = i3->command("workspace number $initial_workspace")->recv;
+$reply->[0]->{'success'} or warn "Error selecting workspace $initial_workspace";
