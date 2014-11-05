@@ -163,6 +163,7 @@ if ( defined $seconds ) {
 while(<>) {
 	chomp;
 	push(@messages, $_);
+	print $_."\n";
 }
 
 # at the end, send email out
