@@ -31,7 +31,9 @@ GetOptions(
 	'a|age=s'		=> \$opts{'min_age'},
 	'r|root=s'		=> \$opts{'root'},
 	'j|join-newlines'	=> \$opts{'join_newlines'},
-	'w|whole-path'		=> \$opts{'whole_path'}
+	'w|whole-path'		=> \$opts{'whole_path'},
+	'ew|extended-whole-path'=> \$opts{'extended_whole_path'},
+	'id|print-id'		=> \$opts{'print_id'},
 ) or HelpMessage(-verbose => 1);
 
 # print help if requested
@@ -125,7 +127,7 @@ sub recurse {
 		my $nodeid = $node->getAttribute("ID");
 
 		# prepend the whole path (i.e. the parent) if the wholepath option was specified
-		if ($opts{'whole_path'}) {
+		if ($opts{'whole_path'} || $opts{'extended_whole_path'}) {
 			$output .= "$parent/";
 		}
 
@@ -200,6 +202,14 @@ sub recurse {
 				$output .= ")";
 			}
 		}
+
+		# print the ID of this node
+		if ($opts{'print_id'}) {
+			$output .= " (#";
+			$output .= $nodeid;
+			$output .= ")";
+		}
+
 
 		# links are stored in <arrowlink> child nodes, but only on the originating node
 		# before starting the recursion, all arrowlink endpoints were stored in %linktargets
@@ -348,15 +358,18 @@ sub recurse {
 		} else {
 
 			# output
-			if (!$quiet) {
+			if ($quiet) {
+				# recurse at same level, because we haven't reached the root of the subtree yet
+				$complete_output .= recurse("$parent/$text", $node, $level);
+			} elsif ($opts{'extended_whole_path'}) {
+				$complete_output .= $output . "\r\n";
+				$complete_output .= recurse($output, $node, $level+1);
+			} else {
 				# build up complete output
 				$complete_output .= $output . "\r\n";
 
 				# recurse one level deeper
 				$complete_output .= recurse("$parent/$text", $node, $level+1);
-			} else {
-				# recurse at same level, because we haven't reached the root of the subtree yet
-				$complete_output .= recurse("$parent/$text", $node, $level);
 			}
 
 		}
@@ -533,6 +546,9 @@ B<--separator ', '> and B<--join-newlines> leads to "line1, line2, line3" in the
 
 Prints the whole path (i.e. all parents nodes) in front of this node's name. Thus, in above example, subnode y would be printed as C<top/node 2/subnode y>.
 
+=item B<-ew|--extended-whole-path>
+
+Like B<-w|--whole-path>, this option prints the whole path (i.e. all parents nodes) in front of this node's name. However, in addition to the actual path to the node, also icons and attributes are printed in the path. So if node 2 in the example above would have had an I<BUTTON_OK> icon, then the subnode y is printed as C<top/node 2 (BUTTON_OK)/subnode y>.
 
 
 =back
